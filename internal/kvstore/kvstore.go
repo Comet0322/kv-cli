@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
@@ -35,16 +37,27 @@ func Open(path string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(b) == 0 {
-		return s, nil
-	}
-	if err := json.Unmarshal(b, &s.data); err != nil {
+	data, err := decode(b)
+	if err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
-	if s.data == nil {
-		s.data = map[string]string{}
-	}
+	s.data = data
 	return s, nil
+}
+
+// decode parses a JSON object of string values; empty input or null is an empty map.
+func decode(b []byte) (map[string]string, error) {
+	m := map[string]string{}
+	if len(b) == 0 {
+		return m, nil
+	}
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, err
+	}
+	if m == nil {
+		m = map[string]string{}
+	}
+	return m, nil
 }
 
 // Get returns the value for key.
@@ -77,6 +90,37 @@ func (s *Store) Delete(key string) error {
 	delete(s.data, key)
 	if err := s.save(); err != nil {
 		s.data[key] = old
+		return err
+	}
+	return nil
+}
+
+// Export writes the whole store to w as indented JSON, the same format as the store file.
+func (s *Store) Export(w io.Writer) error {
+	b, err := json.MarshalIndent(s.data, "", "  ")
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(append(b, '\n'))
+	return err
+}
+
+// Import merges the JSON object read from r into the store with one atomic save.
+// Keys in r overwrite existing ones; other keys stay. On error the store is unchanged.
+func (s *Store) Import(r io.Reader) error {
+	b, err := io.ReadAll(r)
+	if err != nil {
+		return err
+	}
+	in, err := decode(b)
+	if err != nil {
+		return err
+	}
+	old := s.data
+	s.data = maps.Clone(old)
+	maps.Copy(s.data, in)
+	if err := s.save(); err != nil {
+		s.data = old
 		return err
 	}
 	return nil

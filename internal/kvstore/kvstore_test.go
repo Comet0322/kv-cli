@@ -3,6 +3,7 @@ package kvstore
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -82,5 +83,22 @@ func TestOpenInvalidJSON(t *testing.T) {
 	os.WriteFile(p, []byte("{nope"), 0o644)
 	if _, err := Open(p); err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestImportFailureLeavesStoreUnchanged(t *testing.T) {
+	d := t.TempDir()
+	target := filepath.Join(d, "x.json")
+	os.Mkdir(target, 0o755)
+	os.WriteFile(filepath.Join(target, "f"), nil, 0o644)
+	s := &Store{path: target, data: map[string]string{"a": "1"}}
+	if err := s.Import(strings.NewReader(`{"a":"2","b":"3"}`)); err == nil {
+		t.Fatal("expected error")
+	}
+	if l := s.List(); len(l) != 1 || l[0] != (Pair{"a", "1"}) {
+		t.Fatalf("store changed: %v", l)
+	}
+	if es, _ := os.ReadDir(d); len(es) != 1 {
+		t.Fatalf("temp left: %v", es)
 	}
 }
