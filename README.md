@@ -30,12 +30,16 @@ kv set <key> <value>
 kv get <key>
 kv del <key>
 kv list
+kv export
+kv import <file>
 ```
 
 - `set` creates the key or overwrites its value.
 - `get` prints the value followed by a newline.
 - `del` removes the key.
 - `list` prints every pair as `key=value`, sorted by key.
+- `export` prints the whole store to stdout as one indented JSON object, keys sorted. It is the same format as the store file, so an exported file is also a valid `KV_FILE`.
+- `import` reads a JSON file and merges it into the store: every key in the file is set, overwriting any existing value, and keys not in the file stay. The whole import is one atomic save, and importing the same file twice gives the same store.
 
 ### Examples
 
@@ -67,6 +71,15 @@ $ kv get greeting
 hello world
 ```
 
+Back up the store and restore it later:
+
+```sh
+$ kv export > backup.json
+$ KV_FILE=/tmp/restored.json kv import backup.json
+```
+
+`import` follows the same rules as the store file: the input must be a JSON object of string values, and an empty file or `null` imports nothing. Anything else is an error that names the file, and the store is left untouched. On Unix, `kv import /dev/stdin` reads from stdin.
+
 ## Store location
 
 The store is a JSON file. Its path is chosen as follows:
@@ -81,7 +94,7 @@ A missing file is treated as an empty store, so the first `set` creates it. The 
 | Code | Meaning |
 |------|---------|
 | `0`  | Success. |
-| `1`  | Runtime error: the key was not found (`get` or `del`), the store file could not be read or parsed, or it could not be written. |
+| `1`  | Runtime error: the key was not found (`get` or `del`), the store file could not be read or parsed, or it could not be written. For `import`, the file is missing, unreadable, or not a JSON object of string values. |
 | `2`  | Usage error: no command, an unknown command, or the wrong number of arguments. |
 
 Error messages go to stderr; `get` and `list` write results to stdout.
