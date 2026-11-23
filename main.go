@@ -15,7 +15,7 @@ import (
 const usage = "usage: kv set <key> <value> | get <key> | del <key> | list | export"
 
 func main() {
-	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
 
 func storePath() (string, error) {
@@ -29,7 +29,7 @@ func storePath() (string, error) {
 	return filepath.Join(h, ".kv.json"), nil
 }
 
-func run(args []string, stdout, stderr io.Writer) int {
+func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, usage)
 		return 2

@@ -118,3 +118,8 @@ func (s *Store) save() error {
 	}
 	return nil
 }
+
+// SetMany is a stub so the AC10 tests compile; ticket LAB-13 implements it.
+func (s *Store) SetMany(m map[string]string) error {
+	return nil
+}

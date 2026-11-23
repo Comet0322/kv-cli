@@ -13,7 +13,7 @@ import (
 func do(t *testing.T, args ...string) (int, string, string) {
 	t.Helper()
 	var o, e bytes.Buffer
-	c := run(args, &o, &e)
+	c := run(args, strings.NewReader(""), &o, &e)
 	return c, o.String(), e.String()
 }
 
@@ -252,5 +252,204 @@ func TestAC11_ReadmeDocumentsExport(t *testing.T) {
 	}
 	if !strings.Contains(lb, "empty") {
 		t.Errorf("export bullet does not say {} is for an empty store: %s", bullet)
+	}
+}
+
+// doIn runs the CLI with the given string as stdin.
+func doIn(t *testing.T, in string, args ...string) (int, string, string) {
+	t.Helper()
+	var o, e bytes.Buffer
+	c := run(args, strings.NewReader(in), &o, &e)
+	return c, o.String(), e.String()
+}
+
+func readStore(t *testing.T, p string) []byte {
+	t.Helper()
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatalf("read store: %v", err)
+	}
+	return b
+}
+
+func TestAC6_ImportMergesOverwritingAndKeeping(t *testing.T) {
+	setup(t)
+	do(t, "set", "a", "old")
+	do(t, "set", "b", "2")
+	c, o, e := doIn(t, `{"a":"new","c":"3"}`, "import")
+	if c != 0 || o != "" || e != "" {
+		t.Fatalf("import: exit %d, stdout %q, stderr %q; want 0, empty, empty", c, o, e)
+	}
+	if c, o, e := do(t, "list"); c != 0 || o != "a=new\nb=2\nc=3\n" {
+		t.Fatalf("list after import: exit %d, stdout %q, stderr %q; want a=new b=2 c=3", c, o, e)
+	}
+}
+
+func TestAC6_ImportSpecialValuesIntoEmptyStore(t *testing.T) {
+	setup(t)
+	in := `{"q":"say \"hi\"","bs":"C:\\dir","nl":"l1\nl2","u":"héllo 世界","sp":"hello world","h":"a<b>&c","e":""}` + "\n"
+	if c, o, e := doIn(t, in, "import"); c != 0 || o != "" || e != "" {
+		t.Fatalf("import: exit %d, stdout %q, stderr %q", c, o, e)
+	}
+	want := map[string]string{"q": `say "hi"`, "bs": `C:\dir`, "nl": "l1\nl2", "u": "héllo 世界", "sp": "hello world", "h": "a<b>&c", "e": ""}
+	for k, v := range want {
+		if c, o, e := do(t, "get", k); c != 0 || o != v+"\n" {
+			t.Errorf("get %q: exit %d, stdout %q, stderr %q; want %q", k, c, o, e, v+"\n")
+		}
+	}
+}
+
+func TestAC7_ImportEmptyObjectLeavesStoreBytes(t *testing.T) {
+	for _, in := range []string{"{}", "{}\n", " { } "} {
+		p := setup(t)
+		do(t, "set", "b", "2")
+		do(t, "set", "a", "1")
+		before := readStore(t, p)
+		c, o, e := doIn(t, in, "import")
+		if c != 0 {
+			t.Errorf("import %q: exit %d, stdout %q, stderr %q; want 0", in, c, o, e)
+		}
+		if after := readStore(t, p); !bytes.Equal(before, after) {
+			t.Errorf("import %q changed store bytes: before %q, after %q", in, before, after)
+		}
+	}
+}
+
+func TestAC8_ImportInvalidInputWritesNothing(t *testing.T) {
+	inputs := []string{
+		`{bad`,
+		``,
+		`[]`,
+		`"x"`,
+		`42`,
+		`null`,
+		`{"a":"1","b":2}`,
+		`{"a":"1","b":null}`,
+		`{"a":"1","b":{"c":"d"}}`,
+		`{"a":"1","b":true}`,
+		`{"a":"1"} x`,
+	}
+	for _, in := range inputs {
+		p := setup(t)
+		do(t, "set", "z", "0")
+		before := readStore(t, p)
+		c, o, e := doIn(t, in, "import")
+		if c != 1 || o != "" || !strings.HasPrefix(e, "kv: ") {
+			t.Errorf("import %q: exit %d, stdout %q, stderr %q; want 1, empty, prefix \"kv: \"", in, c, o, e)
+		}
+		if after := readStore(t, p); !bytes.Equal(before, after) {
+			t.Errorf("import %q changed store bytes: before %q, after %q", in, before, after)
+		}
+		if c, o, _ := do(t, "get", "a"); c != 1 || o != "" {
+			t.Errorf("import %q: key a was set (get exit %d, stdout %q)", in, c, o)
+		}
+		es, _ := os.ReadDir(filepath.Dir(p))
+		if len(es) != 1 {
+			t.Errorf("import %q: unexpected files in store dir: %v", in, es)
+		}
+	}
+}
+
+func TestAC9_ImportExtraArgsIsUsageError(t *testing.T) {
+	setup(t)
+	for _, a := range [][]string{{"import", "extra"}, {"import", "a", "b"}} {
+		c, o, e := doIn(t, `{"k":"v"}`, a...)
+		if c != 2 || o != "" || e == "" {
+			t.Errorf("%v: exit %d, stdout %q, stderr %q; want 2, empty, non-empty", a, c, o, e)
+		}
+	}
+	// The usage text printed on any usage error mentions import.
+	for _, a := range [][]string{{"import", "extra"}, {}, {"foo"}, {"get"}, {"set", "a"}, {"export", "x"}, {"del"}} {
+		c, _, e := do(t, a...)
+		if c != 2 {
+			t.Errorf("%v: exit %d, want 2", a, c)
+		}
+		if !strings.Contains(e, "import") {
+			t.Errorf("%v: usage text does not mention import: %q", a, e)
+		}
+	}
+}
+
+// readmeSection returns the README section under the given "## " heading.
+func readmeSection(t *testing.T, heading string) string {
+	t.Helper()
+	b, err := os.ReadFile("README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(b)
+	h := "\n## " + heading + "\n"
+	i := strings.Index(s, h)
+	if i < 0 {
+		t.Fatalf("README has no ## %s section", heading)
+	}
+	s = s[i+len(h):]
+	if j := strings.Index(s, "\n## "); j >= 0 {
+		s = s[:j]
+	}
+	return s
+}
+
+func TestAC12_ReadmeDocumentsImport(t *testing.T) {
+	u := readmeSection(t, "Usage")
+	parts := strings.SplitN(u, "```", 3)
+	if len(parts) < 3 {
+		t.Fatal("Usage section has no fenced block")
+	}
+	listed := false
+	for _, l := range strings.Split(parts[1], "\n") {
+		if strings.TrimSpace(l) == "kv import" {
+			listed = true
+		}
+	}
+	if !listed {
+		t.Errorf("Usage block does not list `kv import`:\n%s", parts[1])
+	}
+	var bullet string
+	lines := strings.Split(u, "\n")
+	for i, l := range lines {
+		if strings.HasPrefix(l, "- ") && strings.Contains(l, "import") {
+			bullet = l
+			for _, c := range lines[i+1:] {
+				if strings.TrimSpace(c) == "" || strings.HasPrefix(c, "- ") {
+					break
+				}
+				bullet += " " + strings.TrimSpace(c)
+			}
+			break
+		}
+	}
+	if bullet == "" {
+		t.Fatalf("Usage section has no bullet describing import:\n%s", u)
+	}
+	lb := strings.ToLower(bullet)
+	anyOf := func(what string, ws ...string) {
+		for _, w := range ws {
+			if strings.Contains(lb, w) {
+				return
+			}
+		}
+		t.Errorf("import bullet does not mention %s (any of %q): %s", what, ws, bullet)
+	}
+	anyOf("stdin", "stdin", "standard input")
+	anyOf("a JSON object", "json object")
+	anyOf("merging", "merge")
+	anyOf("overwriting given keys", "overwrit", "replac")
+	anyOf("keeping other keys", "keep", "kept", "preserv", "untouched", "unchanged", "left as")
+	anyOf("all-or-nothing", "all-or-nothing", "all or nothing", "nothing is written", "nothing is changed", "nothing is imported")
+
+	ex := readmeSection(t, "Exit codes")
+	row := ""
+	for _, l := range strings.Split(ex, "\n") {
+		f := strings.Split(l, "|")
+		if len(f) > 2 && strings.Trim(strings.TrimSpace(f[1]), "`") == "1" {
+			row = l
+		}
+	}
+	if row == "" {
+		t.Fatalf("Exit codes table has no row for code 1:\n%s", ex)
+	}
+	if !strings.Contains(row, "import") {
+		t.Errorf("Exit codes row for 1 does not name import's invalid-input case: %s", row)
 	}
 }
