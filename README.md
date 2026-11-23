@@ -31,6 +31,7 @@ kv get <key>
 kv del <key>
 kv list
 kv export
+kv import
 ```
 
 - `set` creates the key or overwrites its value.
@@ -38,6 +39,7 @@ kv export
 - `del` removes the key.
 - `list` prints every pair as `key=value`, sorted by key.
 - `export` prints the whole store to stdout as one compact JSON object with keys sorted, followed by a newline. An empty store prints `{}`.
+- `import` reads a JSON object of string values from stdin and merges it into the store: keys in the input overwrite existing values, and keys not in the input are kept. The import is all-or-nothing: if any part of the input is invalid, nothing is written.
 
 ### Examples
 
@@ -83,7 +85,7 @@ A missing file is treated as an empty store, so the first `set` creates it. The 
 | Code | Meaning |
 |------|---------|
 | `0`  | Success. |
-| `1`  | Runtime error: the key was not found (`get` or `del`), the store file could not be read or parsed, or it could not be written. |
+| `1`  | Runtime error: the key was not found (`get` or `del`), the store file could not be read or parsed, or it could not be written. For `import`, the input on stdin is invalid (not a JSON object of string values), and nothing is written. |
 | `2`  | Usage error: no command, an unknown command, or the wrong number of arguments. |
 
 Error messages go to stderr; `get`, `list` and `export` write results to stdout.
@@ -102,7 +104,7 @@ The store file is a single JSON object mapping string keys to string values:
 
 ## Atomic writes
 
-Every `set` and `del` rewrites the whole file safely:
+Every `set`, `del` and `import` rewrites the whole file safely (an `import` writes all of its pairs in one such rewrite):
 
 1. The new contents are written to a temporary file created in the same directory as the store (named `.kv-*.tmp`).
 2. The temporary file is renamed over the store file.
