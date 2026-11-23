@@ -30,12 +30,14 @@ kv set <key> <value>
 kv get <key>
 kv del <key>
 kv list
+kv version
 ```
 
 - `set` creates the key or overwrites its value.
 - `get` prints the value followed by a newline.
 - `del` removes the key.
 - `list` prints every pair as `key=value`, sorted by key.
+- `version` prints the format of the store file: `1` for the original bare-object format, `2` for the current one. A missing store file reports `2`, and `version` never creates or changes the file.
 
 ### Examples
 

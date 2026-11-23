@@ -21,13 +21,26 @@ type Pair struct {
 
 // Store is a file-backed key-value store.
 type Store struct {
-	path string
-	data map[string]string
+	path   string
+	data   map[string]string
+	format int // 1 for a bare-object (v1) file, 2 for the envelope; zero means no migration
+}
+
+// Format reports the format of the store file: 1 for a bare-object file, otherwise 2.
+func (s *Store) Format() int {
+	if s.format == 1 {
+		return 1
+	}
+	return 2
 }
 
 // Open loads the store at path; a missing file is an empty store.
+//
+// Format detection: an empty file is a v1 store. A file whose top-level
+// "version" is a JSON number is a v2 envelope {"version":2,"data":{...}}.
+// Anything else must be a v1 bare object of string values.
 func Open(path string) (*Store, error) {
-	s := &Store{path: path, data: map[string]string{}}
+	s := &Store{path: path, data: map[string]string{}, format: 2}
 	b, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return s, nil
@@ -36,15 +49,51 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 	if len(b) == 0 {
+		s.format = 1
 		return s, nil
 	}
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(b, &top); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	if top == nil {
+		return nil, fmt.Errorf("parse %s: top-level value is not an object", path)
+	}
+	if raw, ok := top["version"]; ok && isJSONNumber(raw) {
+		return openV2(s, top)
+	}
+	s.format = 1
 	if err := json.Unmarshal(b, &s.data); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
-	if s.data == nil {
-		s.data = map[string]string{}
-	}
 	return s, nil
+}
+
+// openV2 fills s from a v2 envelope. top is the parsed top-level object.
+func openV2(s *Store, top map[string]json.RawMessage) (*Store, error) {
+	data, hasData := top["data"]
+	if len(top) != 2 || !hasData {
+		return nil, fmt.Errorf("parse %s: v2 store must hold exactly version and data", s.path)
+	}
+	var version float64
+	if err := json.Unmarshal(top["version"], &version); err != nil || version != 2 {
+		return nil, fmt.Errorf("parse %s: unsupported format version %s", s.path, top["version"])
+	}
+	var d map[string]string
+	if err := json.Unmarshal(data, &d); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", s.path, err)
+	}
+	if d == nil {
+		return nil, fmt.Errorf("parse %s: data is not an object", s.path)
+	}
+	s.data = d
+	s.format = 2
+	return s, nil
+}
+
+// isJSONNumber reports whether raw is a JSON number literal.
+func isJSONNumber(raw json.RawMessage) bool {
+	return len(raw) > 0 && (raw[0] == '-' || (raw[0] >= '0' && raw[0] <= '9'))
 }
 
 // Get returns the value for key.

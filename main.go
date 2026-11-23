@@ -10,7 +10,7 @@ import (
 	"kv-cli/internal/kvstore"
 )
 
-const usage = "usage: kv set <key> <value> | get <key> | del <key> | list"
+const usage = "usage: kv set <key> <value> | get <key> | del <key> | list | version"
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
@@ -32,7 +32,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, usage)
 		return 2
 	}
-	want := map[string]int{"set": 3, "get": 2, "del": 2, "list": 1}
+	want := map[string]int{"set": 3, "get": 2, "del": 2, "list": 1, "version": 1}
 	n, ok := want[args[0]]
 	if !ok {
 		fmt.Fprintf(stderr, "kv: unknown command %q\n%s\n", args[0], usage)
@@ -72,6 +72,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		for _, p := range s.List() {
 			fmt.Fprintf(stdout, "%s=%s\n", p.Key, p.Value)
 		}
+	case "version":
+		fmt.Fprintln(stdout, s.Format())
 	}
 	if err != nil {
 		fmt.Fprintln(stderr, "kv:", err)
