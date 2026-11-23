@@ -38,7 +38,7 @@ kv import <file>
 - `get` prints the value followed by a newline.
 - `del` removes the key.
 - `list` prints every pair as `key=value`, sorted by key.
-- `export` prints the whole store to stdout as one indented JSON object, keys sorted. It is the same format as the store file, so an exported file is also a valid `KV_FILE`.
+- `export` prints the whole store to stdout as one indented JSON object, keys sorted. It parses the same way as the store file, so an exported file is also a valid `KV_FILE`.
 - `import` reads a JSON file and merges it into the store: every key in the file is set, overwriting any existing value, and keys not in the file stay. The whole import is one atomic save, and importing the same file twice gives the same store.
 
 ### Examples
@@ -97,7 +97,7 @@ A missing file is treated as an empty store, so the first `set` creates it. The 
 | `1`  | Runtime error: the key was not found (`get` or `del`), the store file could not be read or parsed, or it could not be written. For `import`, the file is missing, unreadable, or not a JSON object of string values. |
 | `2`  | Usage error: no command, an unknown command, or the wrong number of arguments. |
 
-Error messages go to stderr; `get` and `list` write results to stdout.
+Error messages go to stderr; `get`, `list` and `export` write results to stdout.
 
 ## Data format
 
@@ -113,7 +113,7 @@ The store file is a single JSON object mapping string keys to string values:
 
 ## Atomic writes
 
-Every `set` and `del` rewrites the whole file safely:
+Every `set`, `del` and `import` rewrites the whole file safely:
 
 1. The new contents are written to a temporary file created in the same directory as the store (named `.kv-*.tmp`).
 2. The temporary file is renamed over the store file.

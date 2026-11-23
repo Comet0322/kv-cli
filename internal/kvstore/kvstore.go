@@ -45,7 +45,6 @@ func Open(path string) (*Store, error) {
 	return s, nil
 }
 
-// decode parses a JSON object of string values; empty input or null is an empty map.
 func decode(b []byte) (map[string]string, error) {
 	m := map[string]string{}
 	if len(b) == 0 {
@@ -95,7 +94,7 @@ func (s *Store) Delete(key string) error {
 	return nil
 }
 
-// Export writes the whole store to w as indented JSON, the same format as the store file.
+// Export writes the whole store to w as indented JSON.
 func (s *Store) Export(w io.Writer) error {
 	b, err := json.MarshalIndent(s.data, "", "  ")
 	if err != nil {

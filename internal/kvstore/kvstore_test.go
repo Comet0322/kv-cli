@@ -89,8 +89,12 @@ func TestOpenInvalidJSON(t *testing.T) {
 func TestImportFailureLeavesStoreUnchanged(t *testing.T) {
 	d := t.TempDir()
 	target := filepath.Join(d, "x.json")
-	os.Mkdir(target, 0o755)
-	os.WriteFile(filepath.Join(target, "f"), nil, 0o644)
+	if err := os.Mkdir(target, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(target, "f"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
 	s := &Store{path: target, data: map[string]string{"a": "1"}}
 	if err := s.Import(strings.NewReader(`{"a":"2","b":"3"}`)); err == nil {
 		t.Fatal("expected error")
