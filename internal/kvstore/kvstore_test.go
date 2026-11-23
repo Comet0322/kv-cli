@@ -84,3 +84,68 @@ func TestOpenInvalidJSON(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+func TestAC10_SetManySetsAndPersists(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "x.json")
+	s, err := Open(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Set("a", "old"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Set("z", "keep"); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"a": "new", "b": "2", "c": "3"}
+	if err := s.SetMany(want); err != nil {
+		t.Fatalf("SetMany: %v", err)
+	}
+	want["z"] = "keep"
+	for k, v := range want {
+		if got, ok := s.Get(k); !ok || got != v {
+			t.Errorf("Get(%q) = %q, %v; want %q", k, got, ok, v)
+		}
+	}
+	s2, err := Open(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for k, v := range want {
+		if got, ok := s2.Get(k); !ok || got != v {
+			t.Errorf("reopened Get(%q) = %q, %v; want %q", k, got, ok, v)
+		}
+	}
+	if n := len(s2.List()); n != len(want) {
+		t.Errorf("reopened store has %d pairs, want %d", n, len(want))
+	}
+	es, _ := os.ReadDir(filepath.Dir(p))
+	if len(es) != 1 {
+		t.Errorf("unexpected files: %v", es)
+	}
+}
+
+func TestAC10_SetManyFailureRestoresAndCleansTemp(t *testing.T) {
+	d := t.TempDir()
+	// target is a directory: the save fails.
+	target := filepath.Join(d, "x.json")
+	os.Mkdir(target, 0o755)
+	os.WriteFile(filepath.Join(target, "f"), nil, 0o644)
+	s := &Store{path: target, data: map[string]string{"a": "old", "b": "keep"}}
+	if err := s.SetMany(map[string]string{"a": "new", "c": "3"}); err == nil {
+		t.Fatal("SetMany: expected error")
+	}
+	if v, ok := s.Get("a"); !ok || v != "old" {
+		t.Errorf("Get(a) = %q, %v; want old", v, ok)
+	}
+	if v, ok := s.Get("b"); !ok || v != "keep" {
+		t.Errorf("Get(b) = %q, %v; want keep", v, ok)
+	}
+	if v, ok := s.Get("c"); ok {
+		t.Errorf("Get(c) = %q, true; want absent", v)
+	}
+	es, _ := os.ReadDir(d)
+	if len(es) != 1 {
+		t.Errorf("temp left: %v", es)
+	}
+}

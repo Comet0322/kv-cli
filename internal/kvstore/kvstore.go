@@ -118,3 +118,20 @@ func (s *Store) save() error {
 	}
 	return nil
 }
+
+// SetMany stores every pair and persists them with a single save. If the save
+// fails, the previous contents are restored.
+func (s *Store) SetMany(m map[string]string) error {
+	old := make(map[string]string, len(s.data))
+	for k, v := range s.data {
+		old[k] = v
+	}
+	for k, v := range m {
+		s.data[k] = v
+	}
+	if err := s.save(); err != nil {
+		s.data = old
+		return err
+	}
+	return nil
+}
