@@ -86,7 +86,7 @@ A missing file is treated as an empty store, so the first `set` creates it. The 
 | `1`  | Runtime error: the key was not found (`get` or `del`), the store file could not be read or parsed, or it could not be written. |
 | `2`  | Usage error: no command, an unknown command, or the wrong number of arguments. |
 
-Error messages go to stderr; `get` and `list` write results to stdout.
+Error messages go to stderr; `get`, `list` and `export` write results to stdout.
 
 ## Data format
 
