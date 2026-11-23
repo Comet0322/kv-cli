@@ -30,12 +30,14 @@ kv set <key> <value>
 kv get <key>
 kv del <key>
 kv list
+kv export
 ```
 
 - `set` creates the key or overwrites its value.
 - `get` prints the value followed by a newline.
 - `del` removes the key.
 - `list` prints every pair as `key=value`, sorted by key.
+- `export` prints the whole store to stdout as one compact JSON object with keys sorted, followed by a newline. An empty store prints `{}`.
 
 ### Examples
 

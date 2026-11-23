@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -10,7 +12,7 @@ import (
 	"kv-cli/internal/kvstore"
 )
 
-const usage = "usage: kv set <key> <value> | get <key> | del <key> | list"
+const usage = "usage: kv set <key> <value> | get <key> | del <key> | list | export"
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
@@ -32,7 +34,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, usage)
 		return 2
 	}
-	want := map[string]int{"set": 3, "get": 2, "del": 2, "list": 1}
+	want := map[string]int{"set": 3, "get": 2, "del": 2, "list": 1, "export": 1}
 	n, ok := want[args[0]]
 	if !ok {
 		fmt.Fprintf(stderr, "kv: unknown command %q\n%s\n", args[0], usage)
@@ -71,6 +73,17 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case "list":
 		for _, p := range s.List() {
 			fmt.Fprintf(stdout, "%s=%s\n", p.Key, p.Value)
+		}
+	case "export":
+		var buf bytes.Buffer
+		enc := json.NewEncoder(&buf)
+		enc.SetEscapeHTML(false)
+		m := map[string]string{}
+		for _, p := range s.List() {
+			m[p.Key] = p.Value
+		}
+		if err = enc.Encode(m); err == nil {
+			stdout.Write(buf.Bytes())
 		}
 	}
 	if err != nil {
