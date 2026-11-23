@@ -10,7 +10,7 @@ import (
 	"kv-cli/internal/kvstore"
 )
 
-const usage = "usage: kv set <key> <value> | get <key> | del <key> | list"
+const usage = "usage: kv set <key> <value> | get <key> | del <key> | list | export | import <file>"
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
@@ -32,7 +32,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, usage)
 		return 2
 	}
-	want := map[string]int{"set": 3, "get": 2, "del": 2, "list": 1}
+	want := map[string]int{"set": 3, "get": 2, "del": 2, "list": 1, "export": 1, "import": 2}
 	n, ok := want[args[0]]
 	if !ok {
 		fmt.Fprintf(stderr, "kv: unknown command %q\n%s\n", args[0], usage)
@@ -71,6 +71,17 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case "list":
 		for _, p := range s.List() {
 			fmt.Fprintf(stdout, "%s=%s\n", p.Key, p.Value)
+		}
+	case "export":
+		err = s.Export(stdout)
+	case "import":
+		var f *os.File
+		if f, err = os.Open(args[1]); err != nil {
+			break
+		}
+		defer f.Close()
+		if err = s.Import(f); err != nil {
+			err = fmt.Errorf("import %s: %w", args[1], err)
 		}
 	}
 	if err != nil {
