@@ -287,19 +287,20 @@ func TestImportEmptyObject(t *testing.T) {
 
 func TestImportRejectedLeavesStoreUnchanged(t *testing.T) {
 	cases := map[string]string{
-		"empty file":     "",
-		"null":           "null",
-		"array":          "[]",
-		"string":         `"x"`,
-		"malformed":      `{"a":"1"`,
-		"trailing data":  `{"z":"1"} x`,
-		"second object":  `{"z":"1"}{"y":"2"}`,
-		"number value":   `{"z":"ok","n":1}`,
-		"boolean value":  `{"z":"ok","n":true}`,
-		"null value":     `{"z":"ok","n":null}`,
-		"object value":   `{"n":{"x":"y"},"z":"ok"}`,
-		"array value":    `{"n":["x"],"z":"ok"}`,
-		"invalid string": `{"z":"ok","n":"\x"}`,
+		"empty file":               "",
+		"null":                     "null",
+		"array":                    "[]",
+		"string":                   `"x"`,
+		"malformed":                `{"a":"1"`,
+		"trailing data":            `{"z":"1"} x`,
+		"second object":            `{"z":"1"}{"y":"2"}`,
+		"number value":             `{"z":"ok","n":1}`,
+		"boolean value":            `{"z":"ok","n":true}`,
+		"null value":               `{"z":"ok","n":null}`,
+		"object value":             `{"n":{"x":"y"},"z":"ok"}`,
+		"array value":              `{"n":["x"],"z":"ok"}`,
+		"invalid string":           `{"z":"ok","n":"\x"}`,
+		"duplicate key null first": `{"z":null,"z":"ok"}`,
 	}
 	for name, content := range cases {
 		t.Run(name, func(t *testing.T) {
