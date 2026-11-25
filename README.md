@@ -31,6 +31,7 @@ kv get <key>
 kv del <key>
 kv list
 kv export
+kv import <file>
 ```
 
 - `set` creates the key or overwrites its value.
@@ -38,6 +39,7 @@ kv export
 - `del` removes the key.
 - `list` prints every pair as `key=value`, sorted by key.
 - `export` prints the whole store to stdout as a JSON object in the [data format](#data-format), with keys sorted, two-space indentation and a trailing newline. An empty or missing store prints `{}`. It never modifies the store file.
+- `import` reads a JSON object in the [data format](#data-format) from `<file>` and merges it into the store: keys in the file are created or overwritten, and every other key is left alone. It prints nothing on success, and an empty object `{}` changes nothing. The import is all-or-nothing: if the file is missing or unreadable, is not a single JSON object, or holds any value that is not a string (a number, boolean, `null`, object or array), the command exits `1` and the store is not changed. A successful import is one [atomic write](#atomic-writes).
 
 ### Examples
 
@@ -81,6 +83,21 @@ $ kv export
 $ kv export > backup.json
 ```
 
+Restore it with `import`. Keys in the backup get their backed-up values back; keys added since the backup are kept:
+
+```sh
+$ kv set name bob
+$ kv set extra 1
+$ kv import backup.json
+$ kv list
+count=42
+extra=1
+greeting=hello world
+name=alice
+```
+
+`kv export > backup.json` followed by `kv import backup.json` into an empty store reproduces the original store exactly.
+
 ## Store location
 
 The store is a JSON file. Its path is chosen as follows:
@@ -95,8 +112,8 @@ A missing file is treated as an empty store, so the first `set` creates it. The 
 | Code | Meaning |
 |------|---------|
 | `0`  | Success. |
-| `1`  | Runtime error: the key was not found (`get` or `del`), the store file could not be read or parsed, or it could not be written. |
-| `2`  | Usage error: no command, an unknown command, or the wrong number of arguments (for example `kv export x`). |
+| `1`  | Runtime error: the key was not found (`get` or `del`), the store file could not be read or parsed, or it could not be written; for `import`, the input file is missing, unreadable, not a JSON object, or holds a non-string value (the store is left unchanged). |
+| `2`  | Usage error: no command, an unknown command, or the wrong number of arguments (for example `kv export x` or `kv import` without a file). |
 
 Error messages go to stderr; `get`, `list` and `export` write results to stdout. `export` exits `1` with nothing on stdout if the store file cannot be read or parsed.
 
@@ -119,11 +136,12 @@ The store file is a single JSON object mapping string keys to string values:
   }
   ```
 
+- `kv import` accepts this format, indented or not. Unlike the store file, an import file must contain exactly one JSON object: an empty file or `null` is an error.
 - A file that is not a valid JSON object is an error for every command, including `list` and `export`. The CLI does not modify it, so you can fix or delete it by hand.
 
 ## Atomic writes
 
-Every `set` and `del` rewrites the whole file safely:
+Every `set`, `del` and `import` rewrites the whole file safely:
 
 1. The new contents are written to a temporary file created in the same directory as the store (named `.kv-*.tmp`).
 2. The temporary file is renamed over the store file.
