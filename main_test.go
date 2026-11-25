@@ -273,3 +273,66 @@ func TestUsageListsImport(t *testing.T) {
 		t.Fatalf("%d %q", c, e)
 	}
 }
+
+func TestImportEmptyObject(t *testing.T) {
+	setup(t)
+	do(t, "set", "a", "1")
+	if c, o, e := do(t, "import", writeFile(t, "{}")); c != 0 || o != "" || e != "" {
+		t.Fatalf("import: %d %q %q", c, o, e)
+	}
+	if c, o, _ := do(t, "list"); c != 0 || o != "a=1\n" {
+		t.Fatalf("list: %d %q", c, o)
+	}
+}
+
+func TestImportRejectedLeavesStoreUnchanged(t *testing.T) {
+	cases := map[string]string{
+		"empty file":     "",
+		"null":           "null",
+		"array":          "[]",
+		"string":         `"x"`,
+		"malformed":      `{"a":"1"`,
+		"trailing data":  `{"z":"1"} x`,
+		"second object":  `{"z":"1"}{"y":"2"}`,
+		"number value":   `{"z":"ok","n":1}`,
+		"boolean value":  `{"z":"ok","n":true}`,
+		"null value":     `{"z":"ok","n":null}`,
+		"object value":   `{"n":{"x":"y"},"z":"ok"}`,
+		"array value":    `{"n":["x"],"z":"ok"}`,
+		"invalid string": `{"z":"ok","n":"\x"}`,
+	}
+	for name, content := range cases {
+		t.Run(name, func(t *testing.T) {
+			p := setup(t)
+			do(t, "set", "a", "1")
+			before, _ := os.ReadFile(p)
+			c, o, e := do(t, "import", writeFile(t, content))
+			if c != 1 || o != "" || !strings.HasPrefix(e, "kv: ") {
+				t.Fatalf("%d %q %q", c, o, e)
+			}
+			if after, _ := os.ReadFile(p); !bytes.Equal(before, after) {
+				t.Fatalf("store changed: %q -> %q", before, after)
+			}
+		})
+	}
+}
+
+func TestImportUnreadableFile(t *testing.T) {
+	for name, f := range map[string]string{
+		"missing":   filepath.Join(t.TempDir(), "nope.json"),
+		"directory": t.TempDir(),
+	} {
+		t.Run(name, func(t *testing.T) {
+			p := setup(t)
+			do(t, "set", "a", "1")
+			before, _ := os.ReadFile(p)
+			c, o, e := do(t, "import", f)
+			if c != 1 || o != "" || !strings.HasPrefix(e, "kv: ") {
+				t.Fatalf("%d %q %q", c, o, e)
+			}
+			if after, _ := os.ReadFile(p); !bytes.Equal(before, after) {
+				t.Fatalf("store changed: %q -> %q", before, after)
+			}
+		})
+	}
+}
