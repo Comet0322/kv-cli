@@ -68,7 +68,7 @@ func TestList(t *testing.T) {
 
 func TestUsageErrors(t *testing.T) {
 	setup(t)
-	for _, a := range [][]string{{}, {"set", "a"}, {"get"}, {"foo"}, {"get", "a", "b"}, {"list", "x"}, {"del"}, {"export", "x"}} {
+	for _, a := range [][]string{{}, {"set", "a"}, {"get"}, {"foo"}, {"get", "a", "b"}, {"list", "x"}, {"del"}, {"export", "x"}, {"import"}, {"import", "a", "b"}} {
 		c, o, e := do(t, a...)
 		if c != 2 || o != "" || e == "" {
 			t.Errorf("%v: %d %q %q", a, c, o, e)
@@ -242,5 +242,34 @@ func TestExportStdoutWriteError(t *testing.T) {
 	var e bytes.Buffer
 	if c := run([]string{"export"}, failWriter{}, &e); c != 1 || !strings.HasPrefix(e.String(), "kv: ") {
 		t.Fatalf("%d %q", c, e.String())
+	}
+}
+
+func writeFile(t *testing.T, content string) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "in.json")
+	if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func TestImportMerges(t *testing.T) {
+	setup(t)
+	do(t, "set", "a", "1")
+	do(t, "set", "b", "2")
+	f := writeFile(t, `{"b":"20","c":"3"}`)
+	if c, o, e := do(t, "import", f); c != 0 || o != "" || e != "" {
+		t.Fatalf("import: %d %q %q", c, o, e)
+	}
+	if c, o, _ := do(t, "list"); c != 0 || o != "a=1\nb=20\nc=3\n" {
+		t.Fatalf("list: %d %q", c, o)
+	}
+}
+
+func TestUsageListsImport(t *testing.T) {
+	setup(t)
+	if c, _, e := do(t); c != 2 || !strings.Contains(e, "| import <file>") {
+		t.Fatalf("%d %q", c, e)
 	}
 }
