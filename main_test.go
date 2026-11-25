@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -128,6 +130,7 @@ func TestExportTrickyValues(t *testing.T) {
 		"backslash": `C:\dir\`,
 		"newline":   "line1\nline2",
 		"unicode":   "台北 café ✓",
+		"control":   "a\x01b\tc",
 		"html":      "<a & b>",
 		"empty":     "",
 	}
@@ -197,5 +200,47 @@ func TestUsageListsExport(t *testing.T) {
 	setup(t)
 	if c, _, e := do(t); c != 2 || !strings.Contains(e, "| export") {
 		t.Fatalf("%d %q", c, e)
+	}
+}
+
+func TestExportManyKeysSorted(t *testing.T) {
+	setup(t)
+	want := "{\n"
+	for i := 0; i < 20; i++ {
+		want += fmt.Sprintf("  \"k%02d\": \"%d\"", i, i)
+		if i < 19 {
+			want += ","
+		}
+		want += "\n"
+	}
+	want += "}\n"
+	for i := 19; i >= 0; i-- {
+		do(t, "set", fmt.Sprintf("k%02d", i), fmt.Sprint(i))
+	}
+	if c, o, e := do(t, "export"); c != 0 || o != want || e != "" {
+		t.Fatalf("%d %q %q", c, o, e)
+	}
+}
+
+func TestExportDefaultPathHome(t *testing.T) {
+	h := t.TempDir()
+	t.Setenv("KV_FILE", "")
+	t.Setenv("HOME", h)
+	do(t, "set", "a", "1")
+	if c, o, e := do(t, "export"); c != 0 || o != "{\n  \"a\": \"1\"\n}\n" || e != "" {
+		t.Fatalf("%d %q %q", c, o, e)
+	}
+}
+
+type failWriter struct{}
+
+func (failWriter) Write([]byte) (int, error) { return 0, errors.New("broken pipe") }
+
+func TestExportStdoutWriteError(t *testing.T) {
+	setup(t)
+	do(t, "set", "a", "1")
+	var e bytes.Buffer
+	if c := run([]string{"export"}, failWriter{}, &e); c != 1 || !strings.HasPrefix(e.String(), "kv: ") {
+		t.Fatalf("%d %q", c, e.String())
 	}
 }
