@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"maps"
 	"os"
 	"path/filepath"
 	"sort"
@@ -108,11 +107,21 @@ func (s *Store) Import(r io.Reader) error {
 	if err != nil {
 		return err
 	}
-	var in map[string]string
+	var in map[string]*string
 	if err := json.Unmarshal(b, &in); err != nil {
 		return fmt.Errorf("import: %w", err)
 	}
-	maps.Copy(s.data, in)
+	if in == nil {
+		return errors.New("import: input is null, want a JSON object")
+	}
+	for k, v := range in {
+		if v == nil {
+			return fmt.Errorf("import: value of key %q is null, want a string", k)
+		}
+	}
+	for k, v := range in {
+		s.data[k] = *v
+	}
 	return s.save()
 }
 
