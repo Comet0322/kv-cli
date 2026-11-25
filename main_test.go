@@ -2,9 +2,12 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 )
 
 func do(t *testing.T, args ...string) (int, string, string) {
@@ -63,7 +66,7 @@ func TestList(t *testing.T) {
 
 func TestUsageErrors(t *testing.T) {
 	setup(t)
-	for _, a := range [][]string{{}, {"set", "a"}, {"get"}, {"foo"}, {"get", "a", "b"}, {"list", "x"}, {"del"}} {
+	for _, a := range [][]string{{}, {"set", "a"}, {"get"}, {"foo"}, {"get", "a", "b"}, {"list", "x"}, {"del"}, {"export", "x"}} {
 		c, o, e := do(t, a...)
 		if c != 2 || o != "" || e == "" {
 			t.Errorf("%v: %d %q %q", a, c, o, e)
@@ -98,5 +101,101 @@ func TestExportSortedIndented(t *testing.T) {
 	c, o, e := do(t, "export")
 	if c != 0 || o != "{\n  \"a\": \"1\",\n  \"b\": \"2\"\n}\n" || e != "" {
 		t.Fatalf("%d %q %q", c, o, e)
+	}
+}
+
+func TestExportEmptyStore(t *testing.T) {
+	p := setup(t)
+	if c, o, e := do(t, "export"); c != 0 || o != "{}\n" || e != "" {
+		t.Fatalf("missing: %d %q %q", c, o, e)
+	}
+	os.WriteFile(p, nil, 0o600)
+	if c, o, e := do(t, "export"); c != 0 || o != "{}\n" || e != "" {
+		t.Fatalf("empty file: %d %q %q", c, o, e)
+	}
+	do(t, "set", "a", "1")
+	do(t, "del", "a")
+	if c, o, e := do(t, "export"); c != 0 || o != "{}\n" || e != "" {
+		t.Fatalf("emptied: %d %q %q", c, o, e)
+	}
+}
+
+func TestExportTrickyValues(t *testing.T) {
+	setup(t)
+	want := map[string]string{
+		"space":     "hello world",
+		"quote":     `say "hi"`,
+		"backslash": `C:\dir\`,
+		"newline":   "line1\nline2",
+		"unicode":   "台北 café ✓",
+		"html":      "<a & b>",
+		"empty":     "",
+	}
+	for k, v := range want {
+		if c, _, e := do(t, "set", k, v); c != 0 {
+			t.Fatalf("set %s: %d %q", k, c, e)
+		}
+	}
+	c, o, e := do(t, "export")
+	if c != 0 || e != "" {
+		t.Fatalf("%d %q", c, e)
+	}
+	var got map[string]string
+	if err := json.Unmarshal([]byte(o), &got); err != nil {
+		t.Fatalf("invalid JSON %q: %v", o, err)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %d pairs, want %d: %q", len(got), len(want), o)
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("%s: got %q, want %q", k, got[k], v)
+		}
+	}
+}
+
+func TestExportCorruptStore(t *testing.T) {
+	p := setup(t)
+	os.WriteFile(p, []byte("{bad"), 0o644)
+	c, o, e := do(t, "export")
+	if c != 1 || o != "" || !strings.HasPrefix(e, "kv: ") {
+		t.Fatalf("%d %q %q", c, o, e)
+	}
+	if b, _ := os.ReadFile(p); string(b) != "{bad" {
+		t.Fatalf("store changed: %q", b)
+	}
+}
+
+func TestExportDoesNotModifyStore(t *testing.T) {
+	p := setup(t)
+	do(t, "set", "a", "1")
+	do(t, "set", "b", "2")
+	old := time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)
+	os.Chtimes(p, old, old)
+	before, _ := os.ReadFile(p)
+	if c, _, e := do(t, "export"); c != 0 {
+		t.Fatalf("%d %q", c, e)
+	}
+	after, _ := os.ReadFile(p)
+	if !bytes.Equal(before, after) {
+		t.Fatalf("bytes changed: %q -> %q", before, after)
+	}
+	fi, err := os.Stat(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !fi.ModTime().Equal(old) {
+		t.Fatalf("mtime changed: %v", fi.ModTime())
+	}
+	es, _ := os.ReadDir(filepath.Dir(p))
+	if len(es) != 1 {
+		t.Fatalf("unexpected files: %v", es)
+	}
+}
+
+func TestUsageListsExport(t *testing.T) {
+	setup(t)
+	if c, _, e := do(t); c != 2 || !strings.Contains(e, "| export") {
+		t.Fatalf("%d %q", c, e)
 	}
 }
