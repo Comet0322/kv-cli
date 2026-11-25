@@ -3,6 +3,7 @@ package kvstore
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -82,5 +83,41 @@ func TestOpenInvalidJSON(t *testing.T) {
 	os.WriteFile(p, []byte("{nope"), 0o644)
 	if _, err := Open(p); err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestImportSaveFailureRollsBack(t *testing.T) {
+	d := t.TempDir()
+	p := filepath.Join(d, "x.json")
+	s, _ := Open(p)
+	if err := s.Set("a", "1"); err != nil {
+		t.Fatal(err)
+	}
+	// replace the store file with a non-empty directory so the rename in save fails
+	os.Remove(p)
+	os.Mkdir(p, 0o755)
+	os.WriteFile(filepath.Join(p, "f"), nil, 0o644)
+	if err := s.Import(strings.NewReader(`{"a":"2","b":"3"}`)); err == nil {
+		t.Fatal("expected error")
+	}
+	if l := s.List(); len(l) != 1 || l[0] != (Pair{"a", "1"}) {
+		t.Fatalf("in-memory data changed: %v", l)
+	}
+	if es, _ := os.ReadDir(d); len(es) != 1 || es[0].Name() != "x.json" {
+		t.Fatalf("unexpected files: %v", es)
+	}
+	if es, _ := os.ReadDir(p); len(es) != 1 || es[0].Name() != "f" {
+		t.Fatalf("target changed: %v", es)
+	}
+}
+
+func TestImportLeavesNoTempFiles(t *testing.T) {
+	d := t.TempDir()
+	s, _ := Open(filepath.Join(d, "x.json"))
+	if err := s.Import(strings.NewReader(`{"a":"1","b":"2"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if es, _ := os.ReadDir(d); len(es) != 1 || es[0].Name() != "x.json" {
+		t.Fatalf("unexpected files: %v", es)
 	}
 }
