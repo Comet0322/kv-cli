@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -90,6 +91,14 @@ func (s *Store) List() []Pair {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
 	return out
+}
+
+// Export writes the data to w as a JSON object with sorted keys, two-space indentation and a trailing newline.
+func (s *Store) Export(w io.Writer) error {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	enc.SetEscapeHTML(false)
+	return enc.Encode(s.data)
 }
 
 // save writes to a temp file in the same directory, then renames over the target.
