@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
@@ -119,10 +120,15 @@ func (s *Store) Import(r io.Reader) error {
 			return fmt.Errorf("import: value of key %q is null, want a string", k)
 		}
 	}
+	old := maps.Clone(s.data)
 	for k, v := range in {
 		s.data[k] = *v
 	}
-	return s.save()
+	if err := s.save(); err != nil {
+		s.data = old
+		return err
+	}
+	return nil
 }
 
 // save writes to a temp file in the same directory, then renames over the target.
