@@ -10,7 +10,7 @@ import (
 	"kv-cli/internal/kvstore"
 )
 
-const usage = "usage: kv set <key> <value> | get <key> | del <key> | list | export"
+const usage = "usage: kv set <key> <value> | get <key> | del <key> | list | export | import <file>"
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
@@ -32,7 +32,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, usage)
 		return 2
 	}
-	want := map[string]int{"set": 3, "get": 2, "del": 2, "list": 1, "export": 1}
+	want := map[string]int{"set": 3, "get": 2, "del": 2, "list": 1, "export": 1, "import": 2}
 	n, ok := want[args[0]]
 	if !ok {
 		fmt.Fprintf(stderr, "kv: unknown command %q\n%s\n", args[0], usage)
@@ -74,10 +74,21 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 	case "export":
 		err = s.Export(stdout)
+	case "import":
+		err = importFile(s, args[1])
 	}
 	if err != nil {
 		fmt.Fprintln(stderr, "kv:", err)
 		return 1
 	}
 	return 0
+}
+
+func importFile(s *kvstore.Store, path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return s.Import(f)
 }

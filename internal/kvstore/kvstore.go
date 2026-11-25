@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
@@ -99,6 +100,20 @@ func (s *Store) Export(w io.Writer) error {
 	enc.SetIndent("", "  ")
 	enc.SetEscapeHTML(false)
 	return enc.Encode(s.data)
+}
+
+// Import merges a JSON object of string keys to string values read from r into the store and persists it.
+func (s *Store) Import(r io.Reader) error {
+	b, err := io.ReadAll(r)
+	if err != nil {
+		return err
+	}
+	var in map[string]string
+	if err := json.Unmarshal(b, &in); err != nil {
+		return fmt.Errorf("import: %w", err)
+	}
+	maps.Copy(s.data, in)
+	return s.save()
 }
 
 // save writes to a temp file in the same directory, then renames over the target.
