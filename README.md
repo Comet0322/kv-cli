@@ -30,12 +30,14 @@ kv set <key> <value>
 kv get <key>
 kv del <key>
 kv list
+kv export
 ```
 
 - `set` creates the key or overwrites its value.
 - `get` prints the value followed by a newline.
 - `del` removes the key.
 - `list` prints every pair as `key=value`, sorted by key.
+- `export` prints the whole store to stdout as a JSON object in the [data format](#data-format), with keys sorted, two-space indentation and a trailing newline. An empty or missing store prints `{}`. It never modifies the store file.
 
 ### Examples
 
@@ -67,6 +69,18 @@ $ kv get greeting
 hello world
 ```
 
+Back up the store with `export`. The output is sorted and has one pair per line, so two backups of the same data are byte-identical and diff cleanly:
+
+```sh
+$ kv export
+{
+  "count": "42",
+  "greeting": "hello world",
+  "name": "alice"
+}
+$ kv export > backup.json
+```
+
 ## Store location
 
 The store is a JSON file. Its path is chosen as follows:
@@ -82,9 +96,9 @@ A missing file is treated as an empty store, so the first `set` creates it. The 
 |------|---------|
 | `0`  | Success. |
 | `1`  | Runtime error: the key was not found (`get` or `del`), the store file could not be read or parsed, or it could not be written. |
-| `2`  | Usage error: no command, an unknown command, or the wrong number of arguments. |
+| `2`  | Usage error: no command, an unknown command, or the wrong number of arguments (for example `kv export x`). |
 
-Error messages go to stderr; `get` and `list` write results to stdout.
+Error messages go to stderr; `get`, `list` and `export` write results to stdout. `export` exits `1` with nothing on stdout if the store file cannot be read or parsed.
 
 ## Data format
 
@@ -96,7 +110,16 @@ The store file is a single JSON object mapping string keys to string values:
 
 - Keys and values must be strings. Numbers such as `42` are stored as the string `"42"`.
 - An empty file is accepted and treated as an empty store.
-- A file that is not a valid JSON object is an error for every command, including `list`. The CLI does not modify it, so you can fix or delete it by hand.
+- `kv export` prints this same format, indented and with keys sorted:
+
+  ```json
+  {
+    "count": "42",
+    "name": "alice"
+  }
+  ```
+
+- A file that is not a valid JSON object is an error for every command, including `list` and `export`. The CLI does not modify it, so you can fix or delete it by hand.
 
 ## Atomic writes
 
