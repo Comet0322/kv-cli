@@ -93,7 +93,6 @@ func TestImportSaveFailureRollsBack(t *testing.T) {
 	if err := s.Set("a", "1"); err != nil {
 		t.Fatal(err)
 	}
-	// replace the store file with a non-empty directory so the rename in save fails
 	os.Remove(p)
 	os.Mkdir(p, 0o755)
 	os.WriteFile(filepath.Join(p, "f"), nil, 0o644)
