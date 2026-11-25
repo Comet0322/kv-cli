@@ -90,3 +90,13 @@ func TestDefaultPathHome(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestExportSortedIndented(t *testing.T) {
+	setup(t)
+	do(t, "set", "b", "2")
+	do(t, "set", "a", "1")
+	c, o, e := do(t, "export")
+	if c != 0 || o != "{\n  \"a\": \"1\",\n  \"b\": \"2\"\n}\n" || e != "" {
+		t.Fatalf("%d %q %q", c, o, e)
+	}
+}
