@@ -336,3 +336,61 @@ func TestImportUnreadableFile(t *testing.T) {
 		})
 	}
 }
+
+func TestImportCorruptStore(t *testing.T) {
+	p := setup(t)
+	os.WriteFile(p, []byte("{bad"), 0o644)
+	c, o, e := do(t, "import", writeFile(t, `{"a":"1"}`))
+	if c != 1 || o != "" || !strings.HasPrefix(e, "kv: ") {
+		t.Fatalf("%d %q %q", c, o, e)
+	}
+	if b, _ := os.ReadFile(p); string(b) != "{bad" {
+		t.Fatalf("store changed: %q", b)
+	}
+}
+
+func TestImportDefaultPathHome(t *testing.T) {
+	h := t.TempDir()
+	t.Setenv("KV_FILE", "")
+	t.Setenv("HOME", h)
+	if c, o, e := do(t, "import", writeFile(t, `{"a":"1"}`)); c != 0 || o != "" || e != "" {
+		t.Fatalf("import: %d %q %q", c, o, e)
+	}
+	if b, err := os.ReadFile(filepath.Join(h, ".kv.json")); err != nil || string(b) != `{"a":"1"}` {
+		t.Fatalf("%q %v", b, err)
+	}
+}
+
+func TestExportImportRoundTrip(t *testing.T) {
+	setup(t)
+	for k, v := range map[string]string{
+		"space":          "hello world",
+		"quote":          `say "hi"`,
+		"backslash":      `C:\dir\`,
+		"newline":        "line1\nline2",
+		"unicode":        "台北 café ✓",
+		"html":           "<a & b>",
+		"empty":          "",
+		"padded":         "  padded\t",
+		"trailing nl":    "last line\n",
+		"key with space": "v",
+	} {
+		if c, _, e := do(t, "set", k, v); c != 0 {
+			t.Fatalf("set %s: %d %q", k, c, e)
+		}
+	}
+	_, wantList, _ := do(t, "list")
+	_, export1, _ := do(t, "export")
+	backup := writeFile(t, export1)
+
+	setup(t)
+	if c, o, e := do(t, "import", backup); c != 0 || o != "" || e != "" {
+		t.Fatalf("import: %d %q %q", c, o, e)
+	}
+	if _, o, _ := do(t, "list"); o != wantList {
+		t.Fatalf("list: got %q, want %q", o, wantList)
+	}
+	if _, o, _ := do(t, "export"); o != export1 {
+		t.Fatalf("export: got %q, want %q", o, export1)
+	}
+}
