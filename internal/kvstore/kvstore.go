@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
@@ -90,6 +92,48 @@ func (s *Store) List() []Pair {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
 	return out
+}
+
+// Export writes the data to w as a JSON object with sorted keys, two-space indentation and a trailing newline.
+func (s *Store) Export(w io.Writer) error {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	enc.SetEscapeHTML(false)
+	return enc.Encode(s.data)
+}
+
+// Import merges a JSON object of string keys to string values read from r into the store and persists it.
+func (s *Store) Import(r io.Reader) error {
+	b, err := io.ReadAll(r)
+	if err != nil {
+		return err
+	}
+	var in map[string]strictString
+	if err := json.Unmarshal(b, &in); err != nil {
+		return fmt.Errorf("import: %w", err)
+	}
+	if in == nil {
+		return errors.New("import: input is null, want a JSON object")
+	}
+	old := maps.Clone(s.data)
+	for k, v := range in {
+		s.data[k] = string(v)
+	}
+	if err := s.save(); err != nil {
+		s.data = old
+		return err
+	}
+	return nil
+}
+
+// strictString decodes like string but rejects null.
+type strictString string
+
+func (s *strictString) UnmarshalJSON(b []byte) error {
+	if string(b) == "null" {
+		return errors.New("null value, want a string")
+	}
+	return json.Unmarshal(b, (*string)(s))
 }
 
 // save writes to a temp file in the same directory, then renames over the target.
